@@ -73,9 +73,10 @@ def plot_accuracy_fit(original_data, quantized_data, output_dir='output', save=F
     plt.legend()
 
     # Calculate metrics for stats box
-    from quantize.analyzer.metrics import calculate_snr, calculate_psnr
-    snr = calculate_snr(original_data, quantized_data)
-    psnr = calculate_psnr(original_data, quantized_data)
+    from quantize.analyzer.metrics import calculate_error_metrics
+    metrics = calculate_error_metrics(original_data, quantized_data)
+    snr = metrics.get('snr', float('inf'))
+    psnr = metrics.get('psnr', float('inf'))
 
     stats_text = (f'SNR: {snr:.2f} dB\n'
                   f'PSNR: {psnr:.2f} dB\n'

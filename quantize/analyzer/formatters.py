@@ -172,7 +172,6 @@ def format_quantization_table(metrics):
 
     # Format Weight Elements
     weight_elements = metrics.get('weight_elements', 0)
-    # 添加逗号分隔符来提高可读性，特别是对于大数字
     weight_elements_str = f"{weight_elements:,}"
     all_metrics.append(["WeightElements", f"{weight_elements_str:>18}"])
 
@@ -232,8 +231,14 @@ def format_combined_analysis(original_stats, metrics):
     return format_table(headers, rows, "Combined Analysis")
 
 def format_combined_sections(original_stats, metrics):
-    original_rows = [
-        ("Shape", str(original_stats.get('shape'))),
+    original_rows = []
+    dist_analysis = original_stats.get('distribution_analysis')
+    if dist_analysis:
+        original_rows.append(("Distribution Type", dist_analysis.get('distribution_type', 'Unknown')))
+        original_rows.append(("Confidence", dist_analysis.get('confidence', 'Low')))
+
+    original_rows.extend([
+        # ("Shape", str(original_stats.get('shape'))),
         ("Mean", f"{original_stats.get('mean', 0):.6f}"),
         ("Median", f"{original_stats.get('median', 0):.6f}"),
         ("Standard Deviation", f"{original_stats.get('std', 0):.6f}"),
@@ -246,7 +251,7 @@ def format_combined_sections(original_stats, metrics):
         ("Interquartile Range (IQR)", f"{original_stats.get('iqr', 0):.6f}"),
         ("Zero Crossing Rate", f"{original_stats.get('zero_crossing_rate', 0):.6f}"),
         ("Non-zero Elements", f"{original_stats.get('non_zero_count', 0)} ({original_stats.get('non_zero_ratio', 0):.2%})")
-    ]
+    ])
 
     summary_rows = []
     snr = metrics.get('snr')
@@ -302,8 +307,14 @@ def format_rich_sections(original_stats, metrics):
         return None
     console = Console(record=True)
     def build_rows(stats):
-        return [
-            ("Shape", str(stats.get('shape'))),
+        rows = []
+        dist_analysis = stats.get('distribution_analysis')
+        if dist_analysis:
+            rows.append(("Distribution Type", dist_analysis.get('distribution_type', 'Unknown')))
+            rows.append(("Confidence", dist_analysis.get('confidence', 'Low')))
+
+        rows.extend([
+            # ("Shape", str(stats.get('shape'))),
             ("Mean", f"{stats.get('mean', 0):.6f}"),
             ("Median", f"{stats.get('median', 0):.6f}"),
             ("Standard Deviation", f"{stats.get('std', 0):.6f}"),
@@ -316,7 +327,8 @@ def format_rich_sections(original_stats, metrics):
             ("Interquartile Range (IQR)", f"{stats.get('iqr', 0):.6f}"),
             ("Zero Crossing Rate", f"{stats.get('zero_crossing_rate', 0):.6f}"),
             ("Non-zero Elements", f"{stats.get('non_zero_count', 0)} ({stats.get('non_zero_ratio', 0):.2%})")
-        ]
+        ])
+        return rows
     def build_summary_rows(m):
         rows = []
         s = m.get('snr')

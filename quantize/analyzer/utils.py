@@ -131,7 +131,14 @@ def export_analysis_csv(original_stats: Dict[str, Any], metrics: Dict[str, Any],
             w = csv.writer(f)
             w.writerow(['Tensor Analysis'])
             w.writerow(['Metric', 'Value'])
-            w.writerow(['Shape', str(original_stats.get('shape'))])
+
+            # Distribution Analysis
+            dist_analysis = original_stats.get('distribution_analysis')
+            if dist_analysis:
+                w.writerow(['Distribution Type', dist_analysis.get('distribution_type', 'Unknown')])
+                w.writerow(['Confidence', dist_analysis.get('confidence', 'Low')])
+
+            # w.writerow(['Shape', str(original_stats.get('shape'))])
             w.writerow(['Mean', f"{original_stats.get('mean', 0):.6f}"])
             w.writerow(['Median', f"{original_stats.get('median', 0):.6f}"])
             w.writerow(['Standard Deviation', f"{original_stats.get('std', 0):.6f}"])

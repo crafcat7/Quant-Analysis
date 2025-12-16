@@ -5,73 +5,6 @@ Metrics module for quantization analysis.
 
 import numpy as np
 from scipy import stats
-from quantize.analyzer.formatters import format_table, print_section
-
-def calculate_snr(original_data, quantized_data):
-    """
-    Calculate SNR (Signal-to-Noise Ratio).
-
-    Args:
-        original_data: Original data array
-        quantized_data: Quantized data array
-
-    Returns:
-        snr_value: SNR in dB
-    """
-    if original_data is None or quantized_data is None:
-        raise ValueError("Please provide original and quantized data")
-
-    # Calculate signal power (variance of original data)
-    signal_power = np.var(original_data)
-
-    # Calculate noise power (variance of difference)
-    noise = original_data - quantized_data
-    noise_power = np.var(noise)
-
-    # Avoid division by zero
-    if noise_power == 0:
-        print("Warning: Noise power is 0, SNR is infinite")
-        return float('inf')
-
-    # Calculate SNR (dB)
-    snr_value = 10 * np.log10(signal_power / noise_power)
-
-    return snr_value
-
-def calculate_psnr(original_data, quantized_data):
-    """
-    Calculate PSNR (Peak Signal-to-Noise Ratio).
-
-    Args:
-        original_data: Original data array
-        quantized_data: Quantized data array
-
-    Returns:
-        psnr_value: PSNR in dB
-    """
-    if original_data is None or quantized_data is None:
-        raise ValueError("Please provide original and quantized data")
-
-    # Calculate Mean Squared Error (MSE)
-    mse = np.mean((original_data - quantized_data) ** 2)
-
-    # Avoid division by zero
-    if mse == 0:
-        print("Warning: MSE is 0, PSNR is infinite")
-        return float('inf')
-
-    # Determine max signal value automatically
-    max_value = np.max(np.abs(original_data))
-
-    # Avoid invalid max value
-    if max_value == 0:
-        print("Warning: Max signal is 0, cannot calculate PSNR")
-        return float('nan')
-
-    # Calculate PSNR (dB)
-    psnr_value = 10 * np.log10((max_value ** 2) / mse)
-
-    return psnr_value
 
 def analyze_original_tensor(original_data):
     """
@@ -94,11 +27,11 @@ def analyze_original_tensor(original_data):
     min_value = np.min(data_flat)
     max_value = np.max(data_flat)
 
-    skewness = stats.skew(data_flat)  # 偏度
-    kurtosis = stats.kurtosis(data_flat)  # 峰度
+    skewness = stats.skew(data_flat)
+    kurtosis = stats.kurtosis(data_flat)
     percentile_25 = np.percentile(data_flat, 25)
     percentile_75 = np.percentile(data_flat, 75)
-    iqr = percentile_75 - percentile_25  # 四分位距
+    iqr = percentile_75 - percentile_25
 
     zero_crossings = np.where(np.diff(np.signbit(data_flat)))[0]
     zero_crossing_rate = len(zero_crossings) / len(data_flat) if len(data_flat) > 0 else 0
@@ -165,3 +98,166 @@ def analyze_original_tensor(original_data):
         'non_zero_ratio': non_zero_ratio,
         'axis_stats': axis_stats
     }
+
+def analyze_distribution(stats, threshold=0.05):
+    """
+    Analyze the distribution of the original data based on thresholds using pre-calculated statistics.
+
+    Args:
+        stats: Dictionary containing statistical metrics (from analyze_original_tensor)
+        threshold: Threshold for determining distribution characteristics
+
+    Returns:
+        dict: Distribution analysis results
+    """
+    if not stats:
+        return {'distribution_type': 'Unknown (No Data)'}
+
+    skewness = stats.get('skewness', 0)
+    kurtosis = stats.get('kurtosis', 0)
+    non_zero_ratio = stats.get('non_zero_ratio', 0)
+
+    distribution_type = "Unknown"
+    confidence = "Low"
+
+    # Check for Sparsity
+    if non_zero_ratio < threshold:
+        distribution_type = "Sparse"
+        confidence = "High"
+    elif non_zero_ratio < 0.3:
+        distribution_type = "Sparse-like"
+        confidence = "Medium"
+
+    # Check for Gaussian (Normal)
+    # Normal: Skewness ~ 0, Kurtosis ~ 0 (Fisher)
+    elif abs(skewness) < threshold and abs(kurtosis) < threshold:
+        distribution_type = "Gaussian"
+        confidence = "High"
+    elif abs(skewness) < threshold * 5 and abs(kurtosis) < threshold * 5:
+         distribution_type = "Gaussian-like"
+         confidence = "Medium"
+
+    # Check for Uniform
+    # Uniform: Skewness ~ 0, Kurtosis ~ -1.2
+    elif abs(skewness) < threshold and abs(kurtosis + 1.2) < threshold:
+        distribution_type = "Uniform"
+        confidence = "High"
+    elif abs(skewness) < threshold * 5 and abs(kurtosis + 1.2) < threshold * 5:
+        distribution_type = "Uniform-like"
+        confidence = "Medium"
+
+    # Check for Symmetric
+    elif abs(skewness) < threshold:
+         distribution_type = "Symmetric"
+         confidence = "Medium"
+
+    return {
+        'distribution_type': distribution_type,
+        'confidence': confidence,
+        'metrics': {
+            'skewness': skewness,
+            'kurtosis': kurtosis,
+            'non_zero_ratio': non_zero_ratio
+        }
+    }
+
+
+def calculate_error_metrics(original_data, quantized_data):
+    """
+    Calculate various error metrics between original and quantized data.
+    Includes SNR, PSNR, SQNR, MSE, MAE, etc.
+
+    Args:
+        original_data: Original data array
+        quantized_data: Quantized data array
+
+    Returns:
+        dict: Dictionary containing all calculated metrics
+    """
+    if original_data is None or quantized_data is None:
+        raise ValueError("Please provide original and quantized data")
+
+    # Ensure numpy arrays
+    original = np.asarray(original_data)
+    quantized = np.asarray(quantized_data)
+
+    # Basic error calculations
+    diff = original - quantized
+    abs_errors = np.abs(diff)
+    mse = np.mean(diff ** 2)
+
+    # Calculate metrics
+    metrics = {
+        'mae': np.mean(abs_errors),
+        'mse': mse,
+        'rmse': np.sqrt(mse),
+        'max_abs_error': np.max(abs_errors),
+        'min_abs_error': np.min(abs_errors),
+        'std_abs_error': np.std(abs_errors),
+    }
+
+    # Calculate SQNR (Signal-to-Quantization Noise Ratio)
+    # SQNR = 10 * log10(Signal_Power / Noise_Power)
+    # Here Signal Power is mean(original^2) and Noise Power is MSE
+    signal_power_sqnr = np.mean(original ** 2)
+    if mse > 0:
+        metrics['sqnr'] = 10 * np.log10(signal_power_sqnr / mse)
+    else:
+        metrics['sqnr'] = float('inf')
+
+    # Calculate PSNR (Peak Signal-to-Noise Ratio)
+    # PSNR = 10 * log10(Max_Value^2 / MSE)
+    max_val = np.max(np.abs(original))
+    if mse == 0:
+        metrics['psnr'] = float('inf')
+    elif max_val == 0:
+        metrics['psnr'] = float('nan')
+    else:
+        metrics['psnr'] = 10 * np.log10((max_val ** 2) / mse)
+
+    # Calculate SNR (Signal-to-Noise Ratio)
+    # SNR = 10 * log10(Var(original) / Var(noise))
+    # Note: calculate_snr function uses variance, SQNR uses mean square.
+    # Reusing the logic from calculate_snr but inlined or called.
+    # Let's call calculate_snr to maintain exact consistency if logic differs slightly,
+    # but efficient implementation would use variance.
+    # calculate_snr uses np.var(original) and np.var(noise)
+    signal_var = np.var(original)
+    noise_var = np.var(diff)
+    if noise_var == 0:
+        metrics['snr'] = float('inf')
+    else:
+        metrics['snr'] = 10 * np.log10(signal_var / noise_var)
+
+    # Calculate Cosine Similarity
+    original_flat = original.flatten()
+    quantized_flat = quantized.flatten()
+
+    norm_original = np.linalg.norm(original_flat)
+    norm_quantized = np.linalg.norm(quantized_flat)
+
+    if norm_original > 0 and norm_quantized > 0:
+        metrics['cosine_similarity'] = np.dot(original_flat, quantized_flat) / (norm_original * norm_quantized)
+    else:
+        metrics['cosine_similarity'] = 0.0
+
+    # Calculate Mean Relative Error
+    non_zero_mask = original != 0
+    if np.any(non_zero_mask):
+        relative_errors = np.abs(diff[non_zero_mask]) / np.abs(original[non_zero_mask])
+        metrics['mean_relative_error'] = np.mean(relative_errors)
+    else:
+        metrics['mean_relative_error'] = 0.0
+
+    # Calculate R-squared (Coefficient of Determination)
+    ss_res = np.sum(diff ** 2)
+    ss_tot = np.sum((original - np.mean(original)) ** 2)
+    if ss_tot > 0:
+        metrics['r2'] = 1 - (ss_res / ss_tot)
+    else:
+        metrics['r2'] = 1.0
+
+    # Calculate weight elements count
+    metrics['weight_elements'] = original.size
+
+    return metrics

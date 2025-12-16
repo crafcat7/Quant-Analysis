@@ -20,7 +20,7 @@ def main():
 
     parser.add_argument('--original', '-o', type=str, required=True, help='Path to original data file')
     parser.add_argument('--quantized', '-q', type=str, required=True, help='Path to quantized data file')
-    parser.add_argument('--shape', '-s', type=str, required=False, help='Tensor shape, e.g., 4x64x1x1')
+    parser.add_argument('--threshold', '-t', type=float, default=0.05, help='Threshold for distribution analysis (default: 0.05)')
 
     args = parser.parse_args()
 
@@ -28,7 +28,7 @@ def main():
         analyzer = QuantizationAnalyzer()
 
         # Always run complete analysis using the analyzer instance
-        analyzer.run_complete_analysis(args.original, args.quantized, tensor_shape=args.shape)
+        analyzer.run_complete_analysis(args.original, args.quantized, threshold=args.threshold)
 
         return 0
     except KeyboardInterrupt:

@@ -7,9 +7,9 @@ Contains the primary QuantizationAnalyzer class.
 import os
 import numpy as np
 import torch
-from quantize.analyzer.utils import load_single_data, export_analysis_csv, parse_tensor_shape
+from quantize.analyzer.utils import load_single_data, export_analysis_csv
 from quantize.analyzer.formatters import format_table, print_section, format_quantization_table, format_combined_sections, format_rich_sections
-from quantize.analyzer.metrics import calculate_snr as calc_snr, calculate_psnr as calc_psnr, analyze_original_tensor
+from quantize.analyzer.metrics import analyze_original_tensor, analyze_distribution, calculate_error_metrics
 from quantize.analyzer.charts import (
     plot_accuracy_fit as plot_accuracy,
     plot_histogram_comparison as plot_histogram,
@@ -37,7 +37,7 @@ class QuantizationAnalyzer:
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
 
-    def load_data(self, original=None, quantized=None, tensor_shape=None):
+    def load_data(self, original=None, quantized=None):
         """
         Load data.
 
@@ -51,14 +51,6 @@ class QuantizationAnalyzer:
         # Load original and dequantized data
         self.original_data = load_single_data(original)
         self.quantized_data = load_single_data(quantized)
-
-        if tensor_shape is not None:
-            ts = parse_tensor_shape(tensor_shape)
-            prod = int(np.prod(ts))
-            if self.original_data is not None and self.original_data.size == prod:
-                self.original_data = self.original_data.reshape(ts)
-            if self.quantized_data is not None and self.quantized_data.size == prod:
-                self.quantized_data = self.quantized_data.reshape(ts)
 
         # Ensure data aligned for comparison
         if self.original_data is not None and self.quantized_data is not None:
@@ -75,24 +67,6 @@ class QuantizationAnalyzer:
 
         return self
 
-    def calculate_snr(self):
-        """
-        Calculate SNR (Signal-to-Noise Ratio).
-
-        Returns:
-            snr_value: SNR in dB
-        """
-        return calc_snr(self.original_data, self.quantized_data)
-
-    def calculate_psnr(self):
-        """
-        Calculate PSNR (Peak Signal-to-Noise Ratio).
-
-        Returns:
-            psnr_value: PSNR in dB
-        """
-        return calc_psnr(self.original_data, self.quantized_data)
-
     def calculate_error_metrics(self):
         """
         Calculate various error metrics between original and quantized data.
@@ -100,68 +74,7 @@ class QuantizationAnalyzer:
         Returns:
             dict: Dictionary containing all calculated metrics
         """
-        # Convert to numpy arrays if they're PyTorch tensors
-        if isinstance(self.original_data, torch.Tensor):
-            original = self.original_data.cpu().numpy()
-        else:
-            original = np.array(self.original_data)
-
-        if isinstance(self.quantized_data, torch.Tensor):
-            quantized = self.quantized_data.cpu().numpy()
-        else:
-            quantized = np.array(self.quantized_data)
-
-        abs_errors = np.abs(original - quantized)
-
-        # Calculate metrics
-        metrics = {
-            'mae': np.mean(abs_errors),
-            'mse': np.mean((original - quantized) ** 2),
-            'rmse': np.sqrt(np.mean((original - quantized) ** 2)),
-            'max_abs_error': np.max(abs_errors),
-            'min_abs_error': np.min(abs_errors),
-            'std_abs_error': np.std(abs_errors),
-        }
-
-        # Calculate SQNR (Signal-to-Quantization Noise Ratio)
-        signal_power = np.mean(original ** 2)
-        noise_power = metrics['mse']
-        if noise_power > 0:
-            metrics['sqnr'] = 10 * np.log10(signal_power / noise_power)
-        else:
-            metrics['sqnr'] = float('inf')
-
-        # Calculate Cosine Similarity
-        original_flat = original.flatten()
-        quantized_flat = quantized.flatten()
-
-        # Avoid division by zero
-        if np.linalg.norm(original_flat) > 0 and np.linalg.norm(quantized_flat) > 0:
-            metrics['cosine_similarity'] = np.dot(original_flat, quantized_flat) / \
-                                         (np.linalg.norm(original_flat) * np.linalg.norm(quantized_flat))
-        else:
-            metrics['cosine_similarity'] = 0.0
-
-        # Calculate Mean Relative Error
-        non_zero_original = original != 0
-        if np.any(non_zero_original):
-            relative_errors = np.abs(original[non_zero_original] - quantized[non_zero_original]) / np.abs(original[non_zero_original])
-            metrics['mean_relative_error'] = np.mean(relative_errors)
-        else:
-            metrics['mean_relative_error'] = 0.0
-
-        # Calculate R-squared (Coefficient of Determination)
-        ss_res = np.sum((original - quantized) ** 2)
-        ss_tot = np.sum((original - np.mean(original)) ** 2)
-        if ss_tot > 0:
-            metrics['r2'] = 1 - (ss_res / ss_tot)
-        else:
-            metrics['r2'] = 1.0
-
-        # Calculate weight elements count
-        metrics['weight_elements'] = original.size
-
-        return metrics
+        return calculate_error_metrics(self.original_data, self.quantized_data)
 
     def plot_accuracy_fit(self, save=False, show=True):
         """
@@ -239,13 +152,33 @@ class QuantizationAnalyzer:
             show
         )
 
-    def run_complete_analysis(self, original=None, quantized=None, tensor_shape=None):
+    def analyze_distribution(self, threshold=0.05, stats=None):
+        """
+        Analyze the distribution of the original data based on thresholds.
+
+        Args:
+            threshold: Threshold for determining distribution characteristics
+            stats: Optional pre-calculated statistics
+
+        Returns:
+            dict: Distribution analysis results
+        """
+        if self.original_data is None:
+            return {'distribution_type': 'Unknown (No Data)'}
+
+        if stats is None:
+            stats = analyze_original_tensor(self.original_data)
+
+        return analyze_distribution(stats, threshold)
+
+    def run_complete_analysis(self, original=None, quantized=None, threshold=0.05):
         """
         Run the complete analysis workflow.
 
         Args:
             original: Original data (array or file path)
             quantized: Quantized data (array or file path)
+            threshold: Threshold for distribution analysis
 
         Returns:
             dict: Dictionary containing analysis results
@@ -254,22 +187,25 @@ class QuantizationAnalyzer:
 
         # Load data if provided
         if original is not None or quantized is not None:
-            self.load_data(original, quantized, tensor_shape)
+            self.load_data(original, quantized)
 
         original_stats = analyze_original_tensor(self.original_data)
 
+        # Analyze distribution
+        dist_analysis = self.analyze_distribution(threshold, stats=original_stats)
+        original_stats['distribution_analysis'] = dist_analysis
+
         # Calculate metrics
-        snr_value = self.calculate_snr()
-        psnr_value = self.calculate_psnr()
         error_metrics = self.calculate_error_metrics()
-        error_metrics['snr'] = snr_value
-        error_metrics['psnr'] = psnr_value
+        snr_value = error_metrics.get('snr', float('inf'))
+        psnr_value = error_metrics.get('psnr', float('inf'))
 
         rich_output = format_rich_sections(original_stats, error_metrics)
         if rich_output is not None:
             print(rich_output)
         else:
             print(format_combined_sections(original_stats, error_metrics))
+
         export_analysis_csv(original_stats, error_metrics, self.output_dir)
 
 
