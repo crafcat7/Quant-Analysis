@@ -6,7 +6,6 @@ Contains the primary QuantizationAnalyzer class.
 
 import os
 import numpy as np
-import torch
 from quantize.analyzer.utils import load_single_data, export_analysis_csv
 from quantize.analyzer.formatters import format_table, print_section, format_quantization_table, format_combined_sections, format_rich_sections
 from quantize.analyzer.metrics import analyze_original_tensor, analyze_distribution, calculate_error_metrics

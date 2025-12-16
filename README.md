@@ -7,6 +7,7 @@ A Python tool for analyzing quantized data, comparing with original data, and ge
 - **Signal Metrics Calculation**
   - Signal-to-Noise Ratio (SNR)
   - Peak Signal-to-Noise Ratio (PSNR)
+  - Distribution Analysis (Type identification, Confidence score)
 
 - **Visualizations**
   - Accuracy fit line plots with linear regression analysis
@@ -15,8 +16,8 @@ A Python tool for analyzing quantized data, comparing with original data, and ge
   - Error distribution plots with statistical analysis
 
 - **Data Support**
-  - Multiple file formats: NPY, NPZ, CSV, TXT
-  - Direct numpy array input support
+  - Multiple file formats: NPY, NPZ, CSV, TXT, PT, PTH
+  - Direct numpy array and PyTorch tensor input support
   - Automatic data sampling for large datasets
 
 ## Installation
@@ -40,6 +41,7 @@ pip install -e .
 - pandas>=1.3.0
 - seaborn>=0.11.0
 - scikit-learn>=1.0.0
+- rich>=10.0.0
 
 ## Usage
 
